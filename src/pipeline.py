@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 import requests
 from openai import OpenAI  # 최신 v1.0+ 방식
-from src.fetch_news import fetch_by_category, fetch_everything, get_full_text
+from fetch_news import fetch_by_category, fetch_everything, get_full_text
 
 # 클라이언트 초기화
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
