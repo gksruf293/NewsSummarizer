@@ -1,51 +1,45 @@
 # src/pipeline.py
 
-from src.fetch_news import fetch_by_category
-from src.embed_rank import rank_articles_by_interest
-
-def run_pipeline(USER_CATEGORY='technology', TOP_K = 3):
-    print(f"Fetching news from category: {USER_CATEGORY}")
-
-    articles = fetch_by_category(
-        category=USER_CATEGORY,
-        country="us",
-        page_size=30
-    )
-
-    print(f"Fetched {len(articles)} articles.")
-
-    if not articles:
-        print("No articles found.")
-        return
-
-    # category 자체를 관심사 텍스트로 사용
-    user_interest = f"Latest news about {USER_CATEGORY}"
-
-    top_articles = rank_articles_by_interest(
-        articles,
-        user_interest=user_interest,
-        top_k=TOP_K
-    )
-
-    print(f"\nSelected {len(top_articles)} articles for summarization.")
-
-    return top_articles
-
-import json
 import os
+import json
+from src.fetch_news import fetch_by_category, fetch_everything
+from src.embed_rank import get_embedding
 
-def save_embeddings(articles):
-    os.makedirs("docs/data", exist_ok=True)
+CATEGORY_LIST = [
+    "business", "entertainment", "general",
+    "health", "science", "sports", "technology"
+]
 
-    data = []
-    for article in articles:
-        data.append({
-            "title": article["title"],
-            "url": article["url"],
-            "source": article["source"],
-            "text": article["text"],
-            "embedding": article["embedding"]
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def run_pipeline():
+    # 1️⃣ Category 뉴스 (top 10, 임베딩 없음)
+    category_data = {}
+    for cat in CATEGORY_LIST:
+        print(f"Fetching category: {cat}")
+        articles = fetch_by_category(category=cat, page_size=10)
+        category_data[cat] = [{"title": a["title"], "description": a["description"], "url": a["url"]} for a in articles]
+
+    save_json("docs/data/category.json", category_data)
+    print("Saved category news!")
+
+    # 2️⃣ Interest 뉴스 (everything 50개 + embedding)
+    query = "Artificial Intelligence and technology innovation"  # 기본 interest
+    print(f"Fetching everything for interest: {query}")
+    articles = fetch_everything(query=query, page_size=50)
+
+    embedding_data = []
+    for art in articles:
+        emb = get_embedding(art["text"])
+        embedding_data.append({
+            "title": art["title"],
+            "description": art["description"],
+            "url": art["url"],
+            "embedding": emb
         })
 
-    with open("docs/data/embeddings.json", "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    save_json("docs/data/embedding.json", embedding_data)
+    print("Saved interest embeddings!")
