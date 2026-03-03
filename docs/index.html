@@ -2,13 +2,26 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Today's AI News</title>
+    <title>AI Curated News</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<h1>Today's Curated News</h1>
-<p id="date"></p>
+<h1>📰 Smart News Curator</h1>
+
+<div class="search-box">
+    <input type="text" id="interestInput" placeholder="Enter your interest...">
+    <button onclick="handleSearch()">Search</button>
+</div>
+
+<div class="categories">
+    <button onclick="filterByCategory('ai')">AI</button>
+    <button onclick="filterByCategory('business')">Business</button>
+    <button onclick="filterByCategory('science')">Science</button>
+    <button onclick="filterByCategory('sports')">Sports</button>
+</div>
+
+<hr>
 
 <div id="news-container"></div>
 
