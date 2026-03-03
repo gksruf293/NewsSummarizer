@@ -10,7 +10,7 @@ async function init() {
     const searchBtn = document.getElementById("searchBtn");
     
     if (searchBtn) searchBtn.disabled = true;
-    container.innerHTML = `<div class="status-msg">AI 학습 모델을 로드 중입니다...</div>`;
+    container.innerHTML = `<div class="status-msg">AI 영문 분석 모델을 로드 중입니다...</div>`;
 
     try {
         extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
@@ -18,7 +18,7 @@ async function init() {
         if (searchBtn) { searchBtn.disabled = false; searchBtn.innerText = "AI 시맨틱 검색"; }
         await loadDataByDate('latest');
     } catch (err) {
-        container.innerHTML = `<div class="error-msg">초기화 실패. 새로고침 해주세요.</div>`;
+        container.innerHTML = `<div class="error-msg">초기화 중 오류가 발생했습니다. 새로고침 해주세요.</div>`;
     }
 }
 
@@ -29,22 +29,31 @@ window.loadDataByDate = async function(date) {
             fetch(`data/${date}/category.json`),
             fetch(`data/${date}/embedding.json`)
         ]);
+        
         categoryData = await catRes.json();
         embeddingData = embRes.ok ? await embRes.json() : [];
         
-        console.log("📦 Data Loaded:", { cats: Object.keys(categoryData), embs: embeddingData.length });
-        renderCards(categoryData['general'] || categoryData[Object.keys(categoryData)[0]]);
+        console.log(`📦 Data Loaded | Categories: ${Object.keys(categoryData).length} | Embeddings: ${embeddingData.length}`);
+        
+        const defaultCat = categoryData['general']?.length > 0 ? 'general' : Object.keys(categoryData)[0];
+        renderCards(categoryData[defaultCat] || []);
     } catch (err) {
-        container.innerHTML = `<div class="error-msg">📍 ${date} 데이터를 찾을 수 없습니다.</div>`;
+        console.error("Fetch Error:", err);
+        container.innerHTML = `<div class="error-msg">📍 데이터를 불러올 수 없습니다. (날짜: ${date})</div>`;
     }
 };
 
 window.handleSearch = async function() {
     const query = document.getElementById("interestInput").value.trim();
-    if (!query || !extractor || embeddingData.length === 0) return;
+    if (!query || !extractor) return;
+    
+    if (!embeddingData || embeddingData.length === 0) {
+        alert("검색 가능한 뉴스 데이터가 없습니다.");
+        return;
+    }
 
     const container = document.getElementById("results-container");
-    container.innerHTML = `<div class="status-msg">'${query}' 검색 중...</div>`;
+    container.innerHTML = `<div class="status-msg">'${query}' 관련 소식을 분석 중입니다...</div>`;
 
     const output = await extractor(query, { pooling: 'mean', normalize: true });
     const userVector = Array.from(output.data);
@@ -54,7 +63,7 @@ window.handleSearch = async function() {
         score: cosineSimilarity(userVector, art.embedding)
     })).sort((a, b) => b.score - a.score);
 
-    renderCards(scored.slice(0, 10));
+    renderCards(scored.slice(0, 12));
 };
 
 function cosineSimilarity(a, b) {
@@ -68,6 +77,12 @@ function cosineSimilarity(a, b) {
 function renderCards(articles) {
     const container = document.getElementById("results-container");
     container.innerHTML = "";
+    
+    if (!articles || articles.length === 0) {
+        container.innerHTML = `<p class="status-msg">해당 조건의 뉴스가 없습니다.</p>`;
+        return;
+    }
+
     articles.forEach(art => {
         const card = document.createElement("div");
         card.className = "card";
@@ -79,7 +94,7 @@ function renderCards(articles) {
             <div class="card-info">
                 ${scoreTag}
                 <h3>${art.title}</h3>
-                <p>${preview.slice(0, 80)}...</p>
+                <p>${preview.slice(0, 90)}...</p>
             </div>
         `;
         card.onclick = () => openModal(art);
@@ -96,12 +111,13 @@ window.openModal = (article) => {
 };
 
 window.updateSummaryLevel = (level) => {
+    if (!currentSelectedArticle.summaries) return;
     const data = currentSelectedArticle.summaries[level];
     document.getElementById("summary-text").innerHTML = `
         <div class="english-box" onclick="toggleTranslation()">
             <p class="en-text">${data.en}</p>
             <p class="ko-text" id="ko-translation" style="display:none;">🔍 ${data.ko}</p>
-            <small style="color: #3b82f6; cursor: pointer; display:block; margin-top:10px;">Click to Translate</small>
+            <small style="color: #3b82f6; display:block; margin-top:10px;">💡 문장을 클릭하면 해석이 나옵니다.</small>
         </div>
     `;
     document.querySelectorAll(".level-btn").forEach(btn => btn.classList.remove("active"));
@@ -110,7 +126,7 @@ window.updateSummaryLevel = (level) => {
 
 window.toggleTranslation = () => {
     const ko = document.getElementById("ko-translation");
-    ko.style.display = ko.style.display === "none" ? "block" : "none";
+    if (ko) ko.style.display = ko.style.display === "none" ? "block" : "none";
 };
 
 window.closeModal = () => document.getElementById("modal").style.display = "none";
