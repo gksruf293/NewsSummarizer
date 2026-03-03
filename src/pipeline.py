@@ -30,3 +30,22 @@ def run_pipeline(USER_CATEGORY='technology', TOP_K = 3):
     print(f"\nSelected {len(top_articles)} articles for summarization.")
 
     return top_articles
+
+import json
+import os
+
+def save_embeddings(articles):
+    os.makedirs("docs/data", exist_ok=True)
+
+    data = []
+    for article in articles:
+        data.append({
+            "title": article["title"],
+            "url": article["url"],
+            "source": article["source"],
+            "text": article["text"],
+            "embedding": article["embedding"]
+        })
+
+    with open("docs/data/embeddings.json", "w", encoding="utf-8") as f:
+        json.dump(data, f)
