@@ -11,27 +11,22 @@
         <div class="header-content">
             <h1>AI News Summarizer</h1>
             <p>초·중·고 수준별 맞춤형 뉴스 요약 서비스</p>
-            <div class="header-content">
-                <h1>AI News Summarizer</h1>
-                <div class="search-bar-row">
-                    <input type="date" id="datePicker" value="2026-03-03">
-                    
-                    <input type="text" id="interestInput" placeholder="관심 있는 주제를 입력하세요">
-                    <button onclick="handleSearch()" id="searchBtn">AI 검색</button>
+            
+            <div class="search-bar-row">
+                <input type="date" id="datePicker" value="2026-03-03">
+                <div class="input-group">
+                    <input type="text" id="interestInput" placeholder="관심 있는 주제를 입력하세요 (예: 우주 개발, AI의 미래)">
+                    <button onclick="handleSearch()" id="searchBtn">AI 시맨틱 검색</button>
                 </div>
-            </div>
-            <div class="search-container">
-                <input type="text" id="interestInput" placeholder="관심 있는 주제를 입력하세요 (예: 우주 개발, AI의 미래)">
-                <button onclick="handleSearch()" id="searchBtn">AI 시맨틱 검색</button>
             </div>
         </div>
     </header>
 
     <nav class="tabs">
-        <button class="tab-btn active" onclick="loadCategory('general', this)">전체</button>
-        <button class="tab-btn" onclick="loadCategory('technology', this)">테크</button>
-        <button class="tab-btn" onclick="loadCategory('science', this)">과학</button>
-        <button class="tab-btn" onclick="loadCategory('business', this)">비즈니스</button>
+        <button class="tab-btn active" data-cat="general" onclick="loadCategory('general', this)">전체</button>
+        <button class="tab-btn" data-cat="technology" onclick="loadCategory('technology', this)">테크</button>
+        <button class="tab-btn" data-cat="science" onclick="loadCategory('science', this)">과학</button>
+        <button class="tab-btn" data-cat="business" onclick="loadCategory('business', this)">비즈니스</button>
     </nav>
 
     <main id="results-container" class="news-grid">
