@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 import requests
 from openai import OpenAI
-from fetch_news import fetch_top_headlines, get_full_text
+from src.fetch_news import fetch_top_headlines, get_full_text
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -13,100 +13,108 @@ HF_API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/
 CATEGORY_LIST = ["business", "entertainment", "general", "health", "science", "sports", "technology"]
 
 def query_hf_embedding(text):
+    """허깅페이스 Inference API 호출 (모델 대기 로직 포함)"""
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    for i in range(3):
+    # 알려주신 로컬 가이드의 로직을 API 옵션으로 구현
+    payload = {
+        "inputs": [text[:1000]], 
+        "options": {"wait_for_model": True, "use_cache": True}
+    }
+    
+    for i in range(3): # 최대 3번 재시도
         try:
-            response = requests.post(HF_API_URL, headers=headers, json={"inputs": text}, timeout=20)
+            # 모델 로딩 시간을 고려하여 timeout을 60초로 설정
+            response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
+            res_json = response.json()
+            
             if response.status_code == 200:
-                res = response.json()
-                if isinstance(res, list): return res
+                # 결과가 [[vector]] 형태이므로 첫 번째 리스트 반환
+                if isinstance(res_json, list) and len(res_json) > 0:
+                    return res_json[0]
+                return res_json
             elif response.status_code == 503:
-                time.sleep(20) # 모델 로딩 대기
+                print(f"⌛ 모델 로딩 중... {i+1}번째 재시도 (30초 대기)")
+                time.sleep(30)
                 continue
-        except:
-            pass
+            else:
+                print(f"⚠️ HF API 오류: {response.status_code} - {res_json}")
+        except Exception as e:
+            print(f"❌ 임베딩 생성 중 네트워크 에러: {e}")
+            
         time.sleep(5)
     return None
 
 def generate_multi_summaries(text):
-    """English ||| Korean 형식의 3단계 요약 생성"""
-    prompts = {
-        "elementary": "2 simple sentences (A1).",
-        "middle": "3 clear sentences (B1).",
-        "high": "Professional summary (C1)."
-    }
+    """영어 학습용 3단계 요약 및 번역 생성"""
+    prompts = {"elementary": "2 simple sentences", "middle": "3 clear sentences", "high": "Advanced summary"}
     summaries = {}
-    if not text or len(text.strip()) < 100:
-        return {k: {"en": "Content too short.", "ko": "본문이 너무 짧습니다."} for k in prompts}
-
-    for level, prompt in prompts.items():
+    content = text[:3000] if text else "No content available."
+    
+    for level, p in prompts.items():
         try:
-            response = client.chat.completions.create(
+            resp = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are an English teacher. Format: English text ||| Korean translation"},
-                    {"role": "user", "content": f"{prompt}\n\nContent: {text[:3000]}"}
+                    {"role": "system", "content": "Format: English ||| Korean"},
+                    {"role": "user", "content": f"{p}\n\nContent: {content}"}
                 ],
                 temperature=0.3
             )
-            res_text = response.choices[0].message.content.strip()
-            if "|||" in res_text:
-                en, ko = res_text.split("|||")
+            res = resp.choices[0].message.content.strip()
+            if "|||" in res:
+                en, ko = res.split("|||")
                 summaries[level] = {"en": en.strip(), "ko": ko.strip()}
             else:
-                summaries[level] = {"en": res_text, "ko": "(번역 준비 중)"}
+                summaries[level] = {"en": res, "ko": "(번역 준비 중)"}
         except:
-            summaries[level] = {"en": "Error.", "ko": "오류"}
+            summaries[level] = {"en": "Error.", "ko": "요약 생성 오류"}
     return summaries
 
 def run_pipeline():
     today_str = datetime.now().strftime("%Y-%m-%d")
     print(f"🚀 Pipeline Start: {today_str}")
 
-    # 1. 시맨틱 검색용 데이터 풀 확보 (Top Headlines 100개)
-    print("--- Fetching 100 Headlines for Semantic Search ---")
-    top_100_articles = fetch_top_headlines(page_size=100)
+    # 1. 시맨틱 검색용 임베딩 풀 구축 (50개 목표)
+    print("--- Building Embedding Pool ---")
+    base_articles = fetch_top_headlines(category="general", page_size=50)
     embedding_results = []
     
-    for art in top_100_articles:
-        combined_text = f"{art['title']}. {art.get('description', '')}"
+    for art in base_articles:
+        combined_text = f"{art['title']}. {art.get('description') or ''}"
         if len(combined_text) < 30: continue
         
-        # 검색용 임베딩 생성
         emb = query_hf_embedding(combined_text)
         if emb:
             embedding_results.append({
-                "title": art["title"],
-                "url": art["url"],
-                "image": art.get("urlToImage"),
-                "embedding": emb,
-                "summaries": generate_multi_summaries(combined_text)
+                "title": art["title"], "url": art["url"], "image": art.get("urlToImage"),
+                "embedding": emb, "summaries": generate_multi_summaries(combined_text)
             })
-            if len(embedding_results) >= 50: break # API 제한 및 속도를 위해 50개로 최적화
+            print(f"✅ Embedded: {art['title'][:40]}...")
     
-    print(f"✅ Successfully embedded {len(embedding_results)} articles.")
+    print(f"🔥 Final Embedding Count: {len(embedding_results)}")
 
-    # 2. 카테고리별 뉴스 (화면 탭 표시용)
+    # 2. 카테고리별 탭 뉴스 수집
     category_results = {}
     for cat in CATEGORY_LIST:
         print(f"Processing category: {cat}")
-        cat_articles = fetch_top_headlines(category=cat, page_size=5)
+        articles = fetch_top_headlines(category=cat, page_size=5)
         processed = []
-        for art in cat_articles:
+        for art in articles:
             full_text = get_full_text(art["url"])
-            summaries = generate_multi_summaries(full_text if len(full_text) > 200 else art.get("description", ""))
+            summaries = generate_multi_summaries(full_text if len(full_text)>200 else art.get("description", ""))
             processed.append({
                 "title": art["title"], "url": art["url"], "image": art.get("urlToImage"), "summaries": summaries
             })
         category_results[cat] = processed
 
-    # 3. 데이터 저장
-    for path in [f"docs/data/{today_str}", "docs/data/latest"]:
-        os.makedirs(path, exist_ok=True)
-        with open(f"{path}/category.json", "w", encoding="utf-8") as f:
+    # 3. 데이터 저장 (GitHub Pages 배포용)
+    for p in [f"docs/data/{today_str}", "docs/data/latest"]:
+        os.makedirs(p, exist_ok=True)
+        with open(f"{p}/category.json", "w", encoding="utf-8") as f:
             json.dump(category_results, f, ensure_ascii=False, indent=2)
-        with open(f"{path}/embedding.json", "w", encoding="utf-8") as f:
+        with open(f"{p}/embedding.json", "w", encoding="utf-8") as f:
             json.dump(embedding_results, f, ensure_ascii=False, indent=2)
+    print("✨ Pipeline Finished Successfully!")
 
 if __name__ == "__main__":
     run_pipeline()
