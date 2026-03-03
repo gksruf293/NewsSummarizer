@@ -2,28 +2,31 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>AI Curated News</title>
+    <title>Smart News RAG</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<h1>📰 Smart News Curator</h1>
+<h1>📰 Smart News Explorer</h1>
 
 <div class="search-box">
     <input type="text" id="interestInput" placeholder="Enter your interest...">
     <button onclick="handleSearch()">Search</button>
 </div>
 
-<div class="categories">
-    <button onclick="filterByCategory('ai')">AI</button>
-    <button onclick="filterByCategory('business')">Business</button>
-    <button onclick="filterByCategory('science')">Science</button>
-    <button onclick="filterByCategory('sports')">Sports</button>
-</div>
-
 <hr>
 
-<div id="news-container"></div>
+<div id="results-container"></div>
+
+<!-- MODAL -->
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <h2 id="modal-title"></h2>
+    <p id="modal-text"></p>
+    <a id="modal-link" target="_blank">Read original article</a>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>
