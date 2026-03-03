@@ -4,8 +4,8 @@ import os
 import json
 import requests
 from typing import List, Dict
-from src.fetch_news import fetch_everything
-from src.embed_rank import get_embedding
+from fetch_news import fetch_everything
+from embed_rank import get_embedding
 
 OUTPUT_PATH = "docs/data/everything_embeddings.json"
 TARGET_ARTICLE_COUNT = 500
