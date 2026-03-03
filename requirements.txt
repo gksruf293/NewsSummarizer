@@ -1,6 +1,6 @@
 requests
 numpy
 newspaper3k
-lxml[html_clean]
+lxml_html_clean
 transformers
 torch
