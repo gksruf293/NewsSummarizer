@@ -8,7 +8,7 @@ from fetch_news import fetch_everything
 from embed_rank import get_embedding
 
 OUTPUT_PATH = "docs/data/everything_embeddings.json"
-TARGET_ARTICLE_COUNT = 500
+TARGET_ARTICLE_COUNT = 50
 
 def extract_full_text(url: str) -> str:
     try:
