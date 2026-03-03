@@ -1,22 +1,98 @@
-/* 요약 수준 변경 시 시각화 업데이트 */
-function updateSummaryLevel(level) {
-    const article = window.selectedArticle;
-    const textBox = document.getElementById("modal-text");
-    
-    // 저장된 다층 요약 데이터에서 선택한 레벨 가져오기
-    textBox.innerText = article.summaries[level];
-    
-    // 버튼 스타일 업데이트
-    document.querySelectorAll('.level-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`btn-${level}`).classList.add('active');
+import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0';
+
+let categoryData = {};
+let embeddingData = [];
+let extractor = null;
+let currentSelectedArticle = null;
+
+async function init() {
+    try {
+        const [catRes, embRes] = await Promise.all([
+            fetch('data/category.json'),
+            fetch('data/embedding.json')
+        ]);
+        categoryData = await catRes.json();
+        embeddingData = await embRes.json();
+
+        // 브라우저용 실시간 임베딩 모델 로드
+        extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+        console.log("AI Model Loaded");
+        
+        loadCategory('general', document.querySelector('.tab-btn.active'));
+    } catch (err) {
+        console.error("데이터 로드 실패:", err);
+    }
 }
 
-/* 모달 열기 */
-function openModal(article) {
-    window.selectedArticle = article;
-    document.getElementById("modal-title").innerText = article.title;
-    document.getElementById("modal").style.display = "block";
-    
-    // 기본값으로 초등 요약 표시
-    updateSummaryLevel('elementary');
+// AI 임베딩 검색 (HuggingFace와 연동)
+window.handleSearch = async function() {
+    const query = document.getElementById("interestInput").value;
+    if(!query || !extractor) return;
+
+    const output = await extractor(query, { pooling: 'mean', normalize: true });
+    const userVector = Array.from(output.data);
+
+    // 코사인 유사도 계산 및 정렬
+    const scored = embeddingData.map(art => ({
+        ...art,
+        score: cosineSimilarity(userVector, art.embedding)
+    })).sort((a, b) => b.score - a.score);
+
+    renderCards(scored.slice(0, 10));
+};
+
+function cosineSimilarity(a, b) {
+    let dot = 0, nA = 0, nB = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        nA += a[i] * a[i];
+        nB += b[i] * b[i];
+    }
+    return dot / (Math.sqrt(nA) * Math.sqrt(nB));
 }
+
+// UI 렌더링 함수
+function renderCards(articles) {
+    const container = document.getElementById("results-container");
+    container.innerHTML = "";
+    articles.forEach(art => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+            <img src="${art.image || 'https://via.placeholder.com/300x180'}" alt="news">
+            <div class="card-info">
+                <h3>${art.title}</h3>
+                <p>${art.description || (art.summaries ? art.summaries.elementary.slice(0, 80) : '')}...</p>
+            </div>
+        `;
+        card.onclick = () => openModal(art);
+        container.appendChild(card);
+    });
+}
+
+// 모달 다층 요약 제어
+window.updateSummaryLevel = function(level) {
+    if(!currentSelectedArticle) return;
+    document.getElementById("summary-text").innerText = currentSelectedArticle.summaries[level];
+    
+    document.querySelectorAll(".level-btn").forEach(btn => btn.classList.remove("active"));
+    document.getElementById(`btn-${level}`).classList.add("active");
+};
+
+window.openModal = function(article) {
+    currentSelectedArticle = article;
+    document.getElementById("modal-title").innerText = article.title;
+    document.getElementById("modal-link").href = article.url;
+    document.getElementById("modal").style.display = "block";
+    updateSummaryLevel('elementary'); // 기본값
+};
+
+window.closeModal = () => document.getElementById("modal").style.display = "none";
+
+window.loadCategory = (cat, btn) => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    renderCards(categoryData[cat] || []);
+};
+
+init();
