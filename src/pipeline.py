@@ -4,32 +4,38 @@ import time
 from datetime import datetime
 import requests
 from openai import OpenAI
-from fetch_news import fetch_top_headlines
+from src.fetch_news import fetch_top_headlines
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# 핵심: 알려주신 모델명을 API 경로에 정확히 삽입합니다.
+# ✅ 410 에러 해결: 최신 router 엔드포인트와 feature-extraction 경로를 결합합니다.
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{MODEL_ID}"
+HF_API_URL = f"https://router.huggingface.co/models/{MODEL_ID}"
 
 CATEGORY_LIST = ["business", "entertainment", "general", "health", "science", "sports", "technology"]
 
 def query_hf_embedding(text):
-    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
-    # API가 인식하기 가장 좋은 순수 텍스트 전송 방식
-    payload = {"inputs": text[:1000], "options": {"wait_for_model": True}}
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type": "application/json",
+        "x-use-cache": "true"
+    }
+    # 라우터 방식에서는 payload 형식을 단순화하는 것이 좋습니다.
+    payload = {"inputs": text[:1000]}
     
     for i in range(3):
         try:
+            # wait_for_model을 헤더나 파라미터 대신 로직으로 처리하거나, 필요시 payload에 포함
             response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=30)
+            
             if response.status_code == 200:
                 res = response.json()
-                # feature-extraction 결과는 보통 1차원 리스트로 옵니다.
-                return res
-            elif response.status_code in [503, 404]:
-                # 404가 일시적인 경로 문제일 수 있으므로 짧게 재시도
-                print(f"⌛ 모델 서버 응답 대기 중 ({response.status_code})... {i+1}차")
+                # 정상 응답이 리스트 형태인지 확인 후 반환
+                return res[0] if isinstance(res, list) else res
+            
+            elif response.status_code == 503 or response.status_code == 429:
+                print(f"⌛ 모델 로딩 중 또는 요청 과부하... {i+1}차 대기 (20초)")
                 time.sleep(20)
                 continue
             else:
@@ -40,7 +46,7 @@ def query_hf_embedding(text):
     return None
 
 def generate_multi_summaries(text):
-    """속도를 위해 1회 호출로 요약 (gpt-4o-mini)"""
+    """안정적인 1회 호출 요약"""
     if not text or len(text) < 30:
         return {k: {"en": "No content", "ko": "내용 없음"} for k in ["elementary", "middle", "high"]}
     try:
@@ -48,7 +54,7 @@ def generate_multi_summaries(text):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Teacher mode. Summarize in 2 sentences. Format: English ||| Korean"},
-                {"role": "user", "content": text[:1500]}
+                {"role": "user", "content": text[:1200]}
             ],
             temperature=0.3
         )
@@ -62,9 +68,9 @@ def generate_multi_summaries(text):
 def run_pipeline():
     start_time = time.time()
     today_str = datetime.now().strftime("%Y-%m-%d")
-    print(f"🚀 파이프라인 시작: {today_str}")
+    print(f"🚀 파이프라인 시작 (Endpoint Updated): {today_str}")
 
-    # 1. 시맨틱 검색 데이터 (20개만 빠르게 진행)
+    # 1. 시맨틱 검색용 임베딩 생성 (20개)
     print("--- 임베딩 생성 시작 ---")
     base_articles = fetch_top_headlines(category="general", page_size=20)
     embedding_results = []
@@ -79,7 +85,7 @@ def run_pipeline():
             })
             print("✅", end="", flush=True)
             
-    # 2. 카테고리별 데이터 (본문 크롤링 생략하여 속도 10배 향상)
+    # 2. 카테고리별 뉴스 데이터 생성
     category_results = {}
     for cat in CATEGORY_LIST:
         articles = fetch_top_headlines(category=cat, page_size=5)
@@ -92,7 +98,7 @@ def run_pipeline():
             })
         category_results[cat] = processed
 
-    # 3. 저장
+    # 3. 데이터 저장
     for p in [f"docs/data/{today_str}", "docs/data/latest"]:
         os.makedirs(p, exist_ok=True)
         with open(f"{p}/category.json", "w", encoding="utf-8") as f:
@@ -100,7 +106,7 @@ def run_pipeline():
         with open(f"{p}/embedding.json", "w", encoding="utf-8") as f:
             json.dump(embedding_results, f, ensure_ascii=False)
             
-    print(f"\n✨ 전체 완료! 소요시간: {int(time.time() - start_time)}초")
+    print(f"\n✨ 전체 완료! 소요시간: {int(time.time() - start_time)}초 | 임베딩 성공: {len(embedding_results)}개")
 
 if __name__ == "__main__":
     run_pipeline()
