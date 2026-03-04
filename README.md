@@ -3,7 +3,7 @@
 > 
 > 사용자의 영어 수준(CEFR 레벨, 유럽언어기준)에 맞춰 뉴스를 재구성하고, 단순 키워드가 아닌 '의미' 단위로 콘텐츠를 탐색하는 AI 학습 플랫폼입니다.
 
-[![Web Site](https://img.shields.io/badge/Visit-Live%20Demo-blue?style=for-the-badge&logo=googlechrome)](https://gksruf293.github.io/news_summarizer/)
+[![Web Site](https://img.shields.io/badge/Visit-Live%20Demo-blue?style=for-the-badge&logo=googlechrome)](https://gksruf293.github.io/NewsSummarizer/)
 
 ---
 
@@ -53,5 +53,5 @@
 ---
 
 ## 🔗 Link
-* **Live Demo**: [https://gksruf293.github.io/news_summarizer/](https://gksruf293.github.io/news_summarizer/)
+* **Live Demo**: [https://gksruf293.github.io/NewsSummarizer/](https://gksruf293.github.io/NewsSummarizer/)
 * **Developer**: 임한결 (AI Developer / RAG & Computer Vision Specialist)
