@@ -11,6 +11,7 @@ let currentSelectedArticle = null;
 async function init() {
     const container = document.getElementById("results-container");
     const searchBtn = document.getElementById("searchBtn");
+    const datePicker = document.getElementById("datePicker");
     
     if (searchBtn) searchBtn.disabled = true;
     container.innerHTML = `<div class="status-msg">AI 모델 및 뉴스 데이터를 로드 중입니다...</div>`;
@@ -20,8 +21,19 @@ async function init() {
         extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
         console.log("✅ AI Model Loaded");
 
-        // 2. 데이터 로드 (최신 데이터)
+        // 2. 데이터 로드 (초기값: latest)
         await loadDataByDate('latest');
+
+        // 3. 날짜 변경 이벤트 리스너 추가 (버그 수정 핵심)
+        if (datePicker) {
+            datePicker.addEventListener('change', (e) => {
+                const selectedDate = e.target.value;
+                if (selectedDate) {
+                    console.log(`📅 날짜 변경 감지: ${selectedDate}`);
+                    loadDataByDate(selectedDate);
+                }
+            });
+        }
 
         if (searchBtn) { 
             searchBtn.disabled = false; 
@@ -38,6 +50,8 @@ async function init() {
  */
 window.loadDataByDate = async function(date) {
     const container = document.getElementById("results-container");
+    container.innerHTML = `<div class="status-msg">${date} 데이터를 불러오는 중...</div>`;
+    
     try {
         const cacheBust = `?t=${new Date().getTime()}`;
         const [catRes, embRes] = await Promise.all([
@@ -45,26 +59,38 @@ window.loadDataByDate = async function(date) {
             fetch(`./data/${date}/embedding.json${cacheBust}`)
         ]);
         
-        if (!catRes.ok || !embRes.ok) throw new Error("데이터 파일을 찾을 수 없습니다.");
+        if (!catRes.ok || !embRes.ok) throw new Error(`${date}의 데이터 파일이 존재하지 않습니다.`);
 
         categoryData = await catRes.json();
         const embJson = await embRes.json();
         embeddingData = Array.isArray(embJson) ? embJson : [];
         
-        console.log(`📊 데이터 로드 완료 | 임베딩: ${embeddingData.length}개`);
+        console.log(`📊 데이터 로드 완료 | 날짜: ${date} | 임베딩: ${embeddingData.length}개`);
 
-        // 초기 화면: 'general' 카테고리 혹은 첫 번째 카테고리 출력
+        // 날짜가 변경되었으므로 카테고리 탭 UI 초기화 (General 활성화)
         const firstCat = categoryData['general'] ? 'general' : Object.keys(categoryData)[0];
+        
+        document.querySelectorAll(".tab-btn").forEach(btn => {
+            btn.classList.remove("active");
+            // 버튼의 텍스트나 onclick 인자와 비교하여 활성화 (HTML 구조에 따라 조정 필요)
+            if (btn.innerText.toLowerCase().includes(firstCat)) {
+                btn.classList.add("active");
+            }
+        });
+
         renderCards(categoryData[firstCat] || []);
 
     } catch (err) {
         console.error("Data Load Error:", err);
-        container.innerHTML = `<div class="error-msg">데이터 로드 실패: ${err.message}</div>`;
+        container.innerHTML = `<div class="error-msg">⚠️ ${err.message}</div>`;
+        // 에러 발생 시 데이터 비우기
+        categoryData = {};
+        embeddingData = [];
     }
 };
 
 /**
- * 시맨틱 검색 실행 함수 (버튼 onclick과 연결)
+ * 시맨틱 검색 실행 함수
  */
 window.handleSearch = async function() {
     const input = document.getElementById("interestInput");
@@ -72,7 +98,7 @@ window.handleSearch = async function() {
     
     if (!query) return;
     if (!extractor || embeddingData.length === 0) {
-        alert("데이터 로딩 중입니다. 잠시만 기다려주세요.");
+        alert("데이터가 준비되지 않았습니다.");
         return;
     }
 
@@ -80,17 +106,15 @@ window.handleSearch = async function() {
     container.innerHTML = `<div class="status-msg">'${query}' 관련 뉴스 분석 중...</div>`;
 
     try {
-        // 검색어 임베딩 추출
         const output = await extractor(query, { pooling: 'mean', normalize: true });
         const userVector = Array.from(output.data);
 
-        // 유사도 계산 및 정렬
         const scored = embeddingData.map(art => ({
             ...art,
             score: cosineSimilarity(userVector, art.embedding)
         })).sort((a, b) => b.score - a.score);
 
-        renderCards(scored.slice(0, 12)); // 상위 12개 출력
+        renderCards(scored.slice(0, 15)); // 검색 시에는 조금 더 넉넉히 출력
     } catch (err) {
         console.error("Search Error:", err);
         container.innerHTML = `<div class="error-msg">검색 중 오류가 발생했습니다.</div>`;
@@ -105,7 +129,7 @@ function renderCards(articles) {
     container.innerHTML = "";
     
     if (!articles || articles.length === 0) {
-        container.innerHTML = `<div class="status-msg">해당 조건에 맞는 뉴스가 없습니다.</div>`;
+        container.innerHTML = `<div class="status-msg">표시할 뉴스가 없습니다.</div>`;
         return;
     }
 
@@ -113,7 +137,6 @@ function renderCards(articles) {
         const card = document.createElement("div");
         card.className = "card";
         
-        // 데이터 누락 방지: 설명이 없으면 제목을 미리보기로 사용
         const summaryPreview = art.summaries?.elementary?.en || art.description || art.title || "No preview available.";
         const scoreTag = art.score ? `<span class="score-tag">${Math.round(art.score * 100)}% 관련됨</span>` : '';
 
@@ -144,7 +167,7 @@ function cosineSimilarity(a, b) {
 }
 
 /**
- * 모달 창 제어
+ * 모달 및 요약 제어
  */
 window.openModal = (article) => {
     currentSelectedArticle = article;
@@ -159,8 +182,8 @@ window.closeModal = () => {
 };
 
 window.updateSummaryLevel = (level) => {
-    // 요약 데이터가 없을 경우를 대비한 안전 장치
-    const summaryData = currentSelectedArticle.summaries?.[level] || { en: "Summary not available.", ko: "요약을 가져올 수 없습니다." };
+    const summaryData = currentSelectedArticle.summaries?.[level] || 
+        { en: "Summary not available.", ko: "요약을 가져올 수 없습니다." };
     
     document.getElementById("summary-text").innerHTML = `
         <div class="english-box" onclick="toggleTranslation()">
