@@ -40,3 +40,14 @@ button#searchBtn { background: var(--primary); color: white; border: none; paddi
 
 .origin-link { display: block; text-align: center; margin-top: 20px; padding: 15px; background: #1e293b; color: white; text-decoration: none; border-radius: 10px; }
 .close { position: absolute; right: 25px; top: 20px; font-size: 30px; cursor: pointer; }
+.no-image {
+    width: 100%;
+    height: 180px;
+    background-color: #f0f2f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
